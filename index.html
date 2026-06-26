@@ -3,484 +3,275 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lyric Romanizer — Suno向け日本語歌詞ローマ字変換</title>
-  <script>
-  // Minimal katakana/hiragana → romaji converter (wanakana fallback)
-  const wanakana = (() => {
-    const combo = {
-      'キャ':'kya','キュ':'kyu','キョ':'kyo',
-      'シャ':'sha','シュ':'shu','ショ':'sho',
-      'チャ':'cha','チュ':'chu','チョ':'cho',
-      'ニャ':'nya','ニュ':'nyu','ニョ':'nyo',
-      'ヒャ':'hya','ヒュ':'hyu','ヒョ':'hyo',
-      'ミャ':'mya','ミュ':'myu','ミョ':'myo',
-      'リャ':'rya','リュ':'ryu','リョ':'ryo',
-      'ギャ':'gya','ギュ':'gyu','ギョ':'gyo',
-      'ジャ':'ja', 'ジュ':'ju', 'ジョ':'jo',
-      'ヂャ':'ja', 'ヂュ':'ju', 'ヂョ':'jo',
-      'ビャ':'bya','ビュ':'byu','ビョ':'byo',
-      'ピャ':'pya','ピュ':'pyu','ピョ':'pyo',
-      'ファ':'fa', 'フィ':'fi', 'フェ':'fe', 'フォ':'fo',
-      'ティ':'ti', 'ディ':'di', 'デュ':'dyu',
-      'ウィ':'wi', 'ウェ':'we', 'ウォ':'wo',
-    };
-    const single = {
-      'ア':'a','イ':'i','ウ':'u','エ':'e','オ':'o',
-      'カ':'ka','キ':'ki','ク':'ku','ケ':'ke','コ':'ko',
-      'サ':'sa','シ':'shi','ス':'su','セ':'se','ソ':'so',
-      'タ':'ta','チ':'chi','ツ':'tsu','テ':'te','ト':'to',
-      'ナ':'na','ニ':'ni','ヌ':'nu','ネ':'ne','ノ':'no',
-      'ハ':'ha','ヒ':'hi','フ':'fu','ヘ':'he','ホ':'ho',
-      'マ':'ma','ミ':'mi','ム':'mu','メ':'me','モ':'mo',
-      'ヤ':'ya','ユ':'yu','ヨ':'yo',
-      'ラ':'ra','リ':'ri','ル':'ru','レ':'re','ロ':'ro',
-      'ワ':'wa','ヲ':'wo','ン':'n',
-      'ガ':'ga','ギ':'gi','グ':'gu','ゲ':'ge','ゴ':'go',
-      'ザ':'za','ジ':'ji','ズ':'zu','ゼ':'ze','ゾ':'zo',
-      'ダ':'da','ヂ':'ji','ヅ':'zu','デ':'de','ド':'do',
-      'バ':'ba','ビ':'bi','ブ':'bu','ベ':'be','ボ':'bo',
-      'パ':'pa','ピ':'pi','プ':'pu','ペ':'pe','ポ':'po',
-      'ァ':'a','ィ':'i','ゥ':'u','ェ':'e','ォ':'o',
-      'ャ':'ya','ュ':'yu','ョ':'yo','ッ':'',
-      'ー':'-',
-    };
-    // hiragana → katakana offset
-    function toKatakana(str) {
-      return str.replace(/[ぁ-ゖ]/g, c =>
-        String.fromCharCode(c.charCodeAt(0) + 0x60));
-    }
-    function toRomaji(str) {
-      let s = toKatakana(String(str || ''));
-      let result = '';
-      let i = 0;
-      while (i < s.length) {
-        // small tsu doubles next consonant
-        if (s[i] === 'ッ' && i + 1 < s.length) {
-          const next2 = combo[s[i+1] + (s[i+2] || '')];
-          const next1 = combo[s[i+1]] || single[s[i+1]] || '';
-          const r = next2 || next1;
-          if (r) { result += r[0]; i++; continue; }
-        }
-        // 2-char combo
-        if (i + 1 < s.length) {
-          const c2 = combo[s[i] + s[i+1]];
-          if (c2) { result += c2; i += 2; continue; }
-        }
-        // 1-char
-        const c1 = single[s[i]];
-        if (c1 !== undefined) { result += c1; i++; continue; }
-        // passthrough (ASCII, punctuation, etc.)
-        result += s[i]; i++;
-      }
-      return result;
-    }
-    return { toRomaji };
-  })();
-  </script>
+  <title>Lyric Romanizer - Suno向け日本語歌詞ローマ字変換</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    *, *::before, *::after { box-sizing: border-box; }
     body {
-      background: #1a1a1a;
-      color: #e0e0e0;
-      font-family: 'Courier New', monospace;
+      margin: 0;
       min-height: 100vh;
-      padding: 24px 16px;
+      background: #111;
+      color: #e8e0c8;
+      font-family: "Courier New", "Yu Gothic", monospace;
+      padding: 24px 16px 48px;
     }
-
-    h1 {
-      color: #f5c842;
-      font-size: 1.3rem;
-      letter-spacing: 0.1em;
-      margin-bottom: 4px;
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; color: #f5c842; letter-spacing: .08em; font-size: 28px; }
+    .subtitle, .hint { color: #9c8d63; line-height: 1.7; }
+    .status {
+      margin: 18px 0;
+      padding: 12px 14px;
+      border: 1px solid #3a3218;
+      border-radius: 8px;
+      background: #17150d;
+      color: #d8c985;
+      min-height: 44px;
     }
-
-    .subtitle {
-      color: #888;
-      font-size: 0.8rem;
-      margin-bottom: 24px;
-    }
-
-    .status-bar {
-      background: #2a2a2a;
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 0.85rem;
-      margin-bottom: 16px;
-      min-height: 36px;
-      color: #aaa;
-    }
-
-    .status-bar.ok { color: #6fcf97; border-color: #6fcf97; }
-    .status-bar.error { color: #eb5757; border-color: #eb5757; }
-    .status-bar.loading { color: #f5c842; border-color: #f5c842; }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    @media (max-width: 700px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-
-    .panel label {
-      display: block;
-      font-size: 0.75rem;
-      color: #888;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
+    .status.ok { border-color: #3f7a4f; color: #8be39a; }
+    .status.error { border-color: #7a3333; color: #ff8d8d; }
+    .status.loading { border-color: #8a6a18; color: #f5c842; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+    label { display: block; color: #f5c842; margin: 18px 0 8px; font-weight: 700; }
     textarea, pre {
       width: 100%;
-      background: #111;
-      border: 1px solid #333;
-      border-radius: 6px;
-      color: #e0e0e0;
-      font-family: 'Courier New', monospace;
-      font-size: 0.9rem;
-      line-height: 1.7;
-      padding: 12px;
-      resize: vertical;
-      min-height: 320px;
-    }
-
-    pre {
+      min-height: 360px;
+      background: #080806;
+      color: #fff4bd;
+      border: 1px solid #2f2915;
+      border-radius: 8px;
+      padding: 16px;
+      font: 18px/1.8 "Courier New", monospace;
       white-space: pre-wrap;
-      overflow-wrap: break-word;
-      overflow-y: auto;
+      overflow: auto;
     }
-
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-
+    textarea { resize: vertical; }
+    pre { margin: 0; }
+    .diff { min-height: 180px; font-size: 15px; color: #cfc28d; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
     button {
-      background: #2a2a2a;
-      border: 1px solid #555;
-      border-radius: 6px;
-      color: #e0e0e0;
+      border: 1px solid #6d5216;
+      background: #131008;
+      color: #f5c842;
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-weight: 700;
       cursor: pointer;
-      font-family: inherit;
-      font-size: 0.85rem;
-      padding: 8px 16px;
-      transition: background 0.15s, border-color 0.15s;
+      font-size: 15px;
     }
-
-    button:hover { background: #3a3a3a; border-color: #f5c842; color: #f5c842; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    button.primary { background: #f5c842; color: #1a1a1a; border-color: #f5c842; font-weight: bold; }
-    button.primary:hover { background: #e6b800; }
-
-    .diff-section { margin-top: 16px; }
-
-    .diff-section label {
-      display: block;
-      font-size: 0.75rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }
-
-    pre.diff {
-      min-height: auto;
-      background: #0d1117;
-      border-color: #30363d;
-    }
-
-    .diff-line-changed { color: #79c0ff; }
-    .diff-line-unchanged { color: #555; }
-
-    .hint {
-      font-size: 0.75rem;
-      color: #666;
-      margin-top: 8px;
-    }
+    button:hover { background: #211a09; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .primary { background: #f5c842; color: #111; border-color: #f5c842; }
+    .danger { color: #ff8d8d; border-color: #693131; }
+    .panel { margin-top: 20px; padding: 16px; border: 1px solid #2f2915; border-radius: 8px; background: #0d0d09; }
+    .small { font-size: 13px; }
   </style>
 </head>
 <body>
+  <main class="wrap">
+    <h1>Lyric Romanizer</h1>
+    <p class="subtitle">Suno向け日本語歌詞ローマ字変換。通常は軽量変換、漢字の読みまで必要な時だけkuromoji精密変換を使います。</p>
 
-<h1>LYRIC ROMANIZER</h1>
-<p class="subtitle">Suno向け日本語歌詞ローマ字変換 — kuromoji + wanakana</p>
+    <div id="status" class="status">準備完了。左に歌詞を入力してください。</div>
 
-<div class="status-bar" id="statusBar">kuromoji辞書を読み込んでいます...</div>
+    <div class="row">
+      <button class="primary" id="lightBtn">軽量かなローマ字変換</button>
+      <button id="kuromojiBtn">kuromoji精密変換</button>
+      <button id="copyBtn" disabled>変換後をコピー</button>
+      <button id="clearBtn" class="danger">クリア</button>
+    </div>
 
-<div class="btn-row">
-  <button class="primary" id="convertBtn" disabled onclick="convert()">ローマ字変換</button>
-  <button id="copyBtn" disabled onclick="copyResult()">変換後をコピー</button>
-  <button onclick="clearAll()">クリア</button>
-</div>
+    <div class="grid">
+      <section>
+        <label for="inputArea">変換前 / 元の歌詞</label>
+        <textarea id="inputArea" placeholder="例：
+[Verse]
+私は海へ行こう
+始発で出かける
+歩幅を合わせる"></textarea>
+      </section>
+      <section>
+        <label for="outputArea">変換後 / Sunoへ渡すローマ字</label>
+        <pre id="outputArea">ここに変換後が表示されます。</pre>
+      </section>
+    </div>
 
-<div class="grid">
-  <div class="panel">
-    <label>変換前 — 日本語歌詞をここに貼り付け</label>
-    <textarea id="inputArea" placeholder="例：&#10;[Verse]&#10;私は海へ行こう&#10;始発で出かける&#10;歩幅を合わせて"></textarea>
-  </div>
-  <div class="panel">
-    <label>変換後 — Sunoへ貼り付けるローマ字</label>
-    <pre id="outputArea">ここに変換後のローマ字が表示されます。</pre>
-  </div>
-</div>
+    <section class="panel">
+      <label for="diffArea">変更された行</label>
+      <pre id="diffArea" class="diff">変換後に表示されます。</pre>
+      <p class="hint small">
+        [Verse] や [Chorus] などのセクションタグはそのまま残します。<br>
+        kuromoji精密変換は初回に辞書を読み込むため時間がかかります。15秒で応答がない場合はエラー表示します。
+      </p>
+    </section>
+  </main>
 
-<div class="diff-section">
-  <label>変更された行（青 = 変更あり）</label>
-  <pre class="diff" id="diffArea">変換後に表示されます。</pre>
-</div>
+  <script>
+    const statusEl = document.getElementById("status");
+    const inputArea = document.getElementById("inputArea");
+    const outputArea = document.getElementById("outputArea");
+    const diffArea = document.getElementById("diffArea");
+    const lightBtn = document.getElementById("lightBtn");
+    const kuromojiBtn = document.getElementById("kuromojiBtn");
+    const copyBtn = document.getElementById("copyBtn");
+    const clearBtn = document.getElementById("clearBtn");
 
-<p class="hint">
-  ・[Verse] [Chorus] などのセクションタグはそのまま残ります。<br>
-  ・助詞「は」→ wa、「へ」→ e、「を」→ o に正しく変換されます（語中の「は」は変わりません）。<br>
-  ・kuromoji辞書は初回のみ読み込みます（数秒かかります）。
-</p>
-
-<script>
-  // ── Web Worker (Blob URL) ──────────────────────────────────────────────
-  // 注意: importScripts自体が失敗した場合、ブラウザによってはWorker内の
-  // トップレベル例外がメインスレッドのworker.onerrorに伝わらないことがある。
-  // そのため、importScriptsをtry-catchで包み、失敗時は確実にpostMessageで
-  // エラーを通知する。
-  const WORKER_SRC = `
-    try {
-      importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
-    } catch (e) {
-      postMessage({ type: 'error', message: 'importScripts失敗: ' + e.message });
-      throw e;
+    function setStatus(message, type = "") {
+      statusEl.textContent = message;
+      statusEl.className = "status" + (type ? " " + type : "");
     }
-    if (typeof kuromoji === 'undefined') {
-      postMessage({ type: 'error', message: 'kuromojiオブジェクトが読み込めませんでした（importScriptsは成功したが、グローバルにkuromojiが存在しない）' });
-    } else {
-      let tokenizer = null;
-      try {
-        kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' })
-          .build(function(err, t) {
-            if (err) { postMessage({ type: 'error', message: 'build失敗: ' + err.message }); return; }
-            tokenizer = t;
-            postMessage({ type: 'ready' });
-          });
-      } catch (e) {
-        postMessage({ type: 'error', message: 'builder呼び出し失敗: ' + e.message });
-      }
-      onmessage = function(e) {
-        if (e.data.type === 'tokenize' && tokenizer) {
-          const lines = e.data.lines;
-          const result = lines.map(function(line) {
-            if (/^\\s*\\[[^\\]]+\\]\\s*$/.test(line) || /^\\s*\\([^\\)]+\\)\\s*$/.test(line)) return line;
-            if (!line.trim()) return line;
-            const tokens = tokenizer.tokenize(line);
-            return tokens.map(function(token) {
-              if (token.pos === '助詞') {
-                if (token.surface_form === 'は') return 'WA_PARTICLE';
-                if (token.surface_form === 'へ') return 'E_PARTICLE';
-                if (token.surface_form === 'を') return 'O_PARTICLE';
-              }
-              return '__READING__' + (token.reading || token.surface_form);
-            }).join('\\x00');
-          });
-          postMessage({ type: 'result', result: result, id: e.data.id });
-        }
-      };
+
+    function isControlLine(line) {
+      return /^\s*\[[^\]]+\]\s*$/.test(line) || /^\s*\([^\)]+\)\s*$/.test(line);
     }
-  `;
 
-  let worker;
-  try {
-    const workerBlob = new Blob([WORKER_SRC], { type: 'application/javascript' });
-    worker = new Worker(URL.createObjectURL(workerBlob));
-  } catch (e) {
-    console.error("[FATAL] Worker生成自体に失敗:", e);
-    setStatusBarFatal("Workerを起動できませんでした: " + e.message);
-  }
-
-  function setStatusBarFatal(msg) {
-    const el = document.getElementById("statusBar");
-    if (el) {
-      el.textContent = msg;
-      el.className = "status-bar error";
-    }
-  }
-
-  // ── タイムアウト監視: 15秒以内に ready/error が来なければ明示的に失敗扱いにする ──
-  let kuromojiReadyOrError = false;
-  setTimeout(function() {
-    if (!kuromojiReadyOrError) {
-      console.warn("[DEBUG] 15秒経過してもkuromoji準備完了/エラー通知が来ません。CDNアクセスまたはWorker起動自体が失敗している可能性が高いです。");
-      setStatusBarFatal("読み込みタイムアウト：CDN(jsdelivr)へのアクセスがブロックされているか、Workerの起動に失敗しています。広告ブロッカーやセキュリティ拡張機能、社内ネットワークのフィルタを確認してください。");
-    }
-  }, 15000);
-
-  // ── ローマ字変換テーブル（インライン）─────────────────────────────────
-  const toRomaji = (() => {
     const combo = {
-      'キャ':'kya','キュ':'kyu','キョ':'kyo',
-      'シャ':'sha','シュ':'shu','ショ':'sho',
-      'チャ':'cha','チュ':'chu','チョ':'cho',
-      'ニャ':'nya','ニュ':'nyu','ニョ':'nyo',
-      'ヒャ':'hya','ヒュ':'hyu','ヒョ':'hyo',
-      'ミャ':'mya','ミュ':'myu','ミョ':'myo',
-      'リャ':'rya','リュ':'ryu','リョ':'ryo',
-      'ギャ':'gya','ギュ':'gyu','ギョ':'gyo',
-      'ジャ':'ja','ジュ':'ju','ジョ':'jo',
-      'ヂャ':'ja','ヂュ':'ju','ヂョ':'jo',
-      'ビャ':'bya','ビュ':'byu','ビョ':'byo',
-      'ピャ':'pya','ピュ':'pyu','ピョ':'pyo',
-      'ファ':'fa','フィ':'fi','フェ':'fe','フォ':'fo',
-      'ティ':'ti','ディ':'di','デュ':'dyu',
-      'ウィ':'wi','ウェ':'we','ウォ':'wo',
+      きゃ:"kya",きゅ:"kyu",きょ:"kyo",しゃ:"sha",しゅ:"shu",しょ:"sho",ちゃ:"cha",ちゅ:"chu",ちょ:"cho",
+      にゃ:"nya",にゅ:"nyu",にょ:"nyo",ひゃ:"hya",ひゅ:"hyu",ひょ:"hyo",みゃ:"mya",みゅ:"myu",みょ:"myo",
+      りゃ:"rya",りゅ:"ryu",りょ:"ryo",ぎゃ:"gya",ぎゅ:"gyu",ぎょ:"gyo",じゃ:"ja",じゅ:"ju",じょ:"jo",
+      びゃ:"bya",びゅ:"byu",びょ:"byo",ぴゃ:"pya",ぴゅ:"pyu",ぴょ:"pyo",
+      キャ:"kya",キュ:"kyu",キョ:"kyo",シャ:"sha",シュ:"shu",ショ:"sho",チャ:"cha",チュ:"chu",チョ:"cho",
+      ニャ:"nya",ニュ:"nyu",ニョ:"nyo",ヒャ:"hya",ヒュ:"hyu",ヒョ:"hyo",ミャ:"mya",ミュ:"myu",ミョ:"myo",
+      リャ:"rya",リュ:"ryu",リョ:"ryo",ギャ:"gya",ギュ:"gyu",ギョ:"gyo",ジャ:"ja",ジュ:"ju",ジョ:"jo",
+      ビャ:"bya",ビュ:"byu",ビョ:"byo",ピャ:"pya",ピュ:"pyu",ピョ:"pyo",ファ:"fa",フィ:"fi",フェ:"fe",フォ:"fo"
     };
     const single = {
-      'ア':'a','イ':'i','ウ':'u','エ':'e','オ':'o',
-      'カ':'ka','キ':'ki','ク':'ku','ケ':'ke','コ':'ko',
-      'サ':'sa','シ':'shi','ス':'su','セ':'se','ソ':'so',
-      'タ':'ta','チ':'chi','ツ':'tsu','テ':'te','ト':'to',
-      'ナ':'na','ニ':'ni','ヌ':'nu','ネ':'ne','ノ':'no',
-      'ハ':'ha','ヒ':'hi','フ':'fu','ヘ':'he','ホ':'ho',
-      'マ':'ma','ミ':'mi','ム':'mu','メ':'me','モ':'mo',
-      'ヤ':'ya','ユ':'yu','ヨ':'yo',
-      'ラ':'ra','リ':'ri','ル':'ru','レ':'re','ロ':'ro',
-      'ワ':'wa','ヲ':'wo','ン':'n',
-      'ガ':'ga','ギ':'gi','グ':'gu','ゲ':'ge','ゴ':'go',
-      'ザ':'za','ジ':'ji','ズ':'zu','ゼ':'ze','ゾ':'zo',
-      'ダ':'da','ヂ':'ji','ヅ':'zu','デ':'de','ド':'do',
-      'バ':'ba','ビ':'bi','ブ':'bu','ベ':'be','ボ':'bo',
-      'パ':'pa','ピ':'pi','プ':'pu','ペ':'pe','ポ':'po',
-      'ァ':'a','ィ':'i','ゥ':'u','ェ':'e','ォ':'o',
-      'ャ':'ya','ュ':'yu','ョ':'yo','ッ':'','ー':'-',
+      あ:"a",い:"i",う:"u",え:"e",お:"o",か:"ka",き:"ki",く:"ku",け:"ke",こ:"ko",さ:"sa",し:"shi",す:"su",せ:"se",そ:"so",
+      た:"ta",ち:"chi",つ:"tsu",て:"te",と:"to",な:"na",に:"ni",ぬ:"nu",ね:"ne",の:"no",は:"ha",ひ:"hi",ふ:"fu",へ:"he",ほ:"ho",
+      ま:"ma",み:"mi",む:"mu",め:"me",も:"mo",や:"ya",ゆ:"yu",よ:"yo",ら:"ra",り:"ri",る:"ru",れ:"re",ろ:"ro",わ:"wa",を:"wo",ん:"n",
+      が:"ga",ぎ:"gi",ぐ:"gu",げ:"ge",ご:"go",ざ:"za",じ:"ji",ず:"zu",ぜ:"ze",ぞ:"zo",だ:"da",ぢ:"ji",づ:"zu",で:"de",ど:"do",
+      ば:"ba",び:"bi",ぶ:"bu",べ:"be",ぼ:"bo",ぱ:"pa",ぴ:"pi",ぷ:"pu",ぺ:"pe",ぽ:"po",
+      ア:"a",イ:"i",ウ:"u",エ:"e",オ:"o",カ:"ka",キ:"ki",ク:"ku",ケ:"ke",コ:"ko",サ:"sa",シ:"shi",ス:"su",セ:"se",ソ:"so",
+      タ:"ta",チ:"chi",ツ:"tsu",テ:"te",ト:"to",ナ:"na",ニ:"ni",ヌ:"nu",ネ:"ne",ノ:"no",ハ:"ha",ヒ:"hi",フ:"fu",ヘ:"he",ホ:"ho",
+      マ:"ma",ミ:"mi",ム:"mu",メ:"me",モ:"mo",ヤ:"ya",ユ:"yu",ヨ:"yo",ラ:"ra",リ:"ri",ル:"ru",レ:"re",ロ:"ro",ワ:"wa",ヲ:"wo",ン:"n",
+      ガ:"ga",ギ:"gi",グ:"gu",ゲ:"ge",ゴ:"go",ザ:"za",ジ:"ji",ズ:"zu",ゼ:"ze",ゾ:"zo",ダ:"da",ヂ:"ji",ヅ:"zu",デ:"de",ド:"do",
+      バ:"ba",ビ:"bi",ブ:"bu",ベ:"be",ボ:"bo",パ:"pa",ピ:"pi",プ:"pu",ペ:"pe",ポ:"po",ぁ:"a",ぃ:"i",ぅ:"u",ぇ:"e",ぉ:"o",ゃ:"ya",ゅ:"yu",ょ:"yo",っ:"",ー:"-"
     };
-    function toKatakana(s) {
-      return s.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
-    }
-    return function(str) {
-      let s = toKatakana(String(str || ''));
-      let r = '', i = 0;
-      while (i < s.length) {
-        if (s[i] === 'ッ' && i + 1 < s.length) {
-          const n = combo[s[i+1] + (s[i+2] || '')] || combo[s[i+1]] || single[s[i+1]] || '';
-          if (n) { r += n[0]; i++; continue; }
+
+    function kanaToRomaji(value) {
+      const s = String(value || "");
+      let out = "";
+      for (let i = 0; i < s.length; i++) {
+        if ((s[i] === "っ" || s[i] === "ッ") && i + 1 < s.length) {
+          const next = combo[s.slice(i + 1, i + 3)] || single[s[i + 1]] || "";
+          if (next) { out += next[0]; continue; }
         }
-        if (i + 1 < s.length) { const c2 = combo[s[i] + s[i+1]]; if (c2) { r += c2; i += 2; continue; } }
-        const c1 = single[s[i]];
-        if (c1 !== undefined) { r += c1; i++; continue; }
-        r += s[i]; i++;
+        const two = s.slice(i, i + 2);
+        if (combo[two]) { out += combo[two]; i++; continue; }
+        out += single[s[i]] !== undefined ? single[s[i]] : s[i];
       }
-      return r;
-    };
-  })();
-
-  // ── UI ────────────────────────────────────────────────────────────────
-  const statusBar  = document.getElementById("statusBar");
-  const convertBtn = document.getElementById("convertBtn");
-  const copyBtn    = document.getElementById("copyBtn");
-  const outputArea = document.getElementById("outputArea");
-  const diffArea   = document.getElementById("diffArea");
-
-  function setStatus(msg, type) {
-    statusBar.textContent = msg;
-    statusBar.className = "status-bar" + (type ? " " + type : "");
-  }
-
-  let pendingResolve = null;
-
-  if (worker) {
-    worker.onmessage = function(e) {
-      if (e.data.type === 'ready') {
-        kuromojiReadyOrError = true;
-        convertBtn.disabled = false;
-        setStatus("準備完了 — 日本語歌詞を貼り付けて「ローマ字変換」を押してください。", "ok");
-      } else if (e.data.type === 'error') {
-        kuromojiReadyOrError = true;
-        console.error("[DEBUG] Worker内部からのエラー通知:", e.data.message);
-        setStatus("kuromoji読み込み失敗: " + e.data.message, "error");
-      } else if (e.data.type === 'result' && pendingResolve) {
-        pendingResolve(e.data.result);
-        pendingResolve = null;
-      }
-    };
-
-    worker.onerror = function(e) {
-      kuromojiReadyOrError = true;
-      console.error("[DEBUG] worker.onerror発火:", e, "message:", e.message, "filename:", e.filename, "lineno:", e.lineno);
-      setStatus("Worker エラー: " + (e.message || "詳細不明（Consoleのfilename/linenoを確認）"), "error");
-    };
-  }
-
-  function decodeWorkerLine(encoded) {
-    return encoded.split('\x00').map(function(part) {
-      if (part === 'WA_PARTICLE') return 'wa';
-      if (part === 'E_PARTICLE')  return 'e';
-      if (part === 'O_PARTICLE')  return 'o';
-      if (part.startsWith('__READING__')) return toRomaji(part.slice(11));
-      return part;
-    }).join('');
-  }
-
-  function convert() {
-    const input = document.getElementById("inputArea").value;
-    if (!input.trim()) { setStatus("歌詞を入力してください。", "error"); return; }
-
-    if (!worker) {
-      setStatus("Workerが起動していないため変換できません。ページを再読み込みしてください。", "error");
-      return;
+      return out;
     }
 
-    setStatus("変換中...", "loading");
-    convertBtn.disabled = true;
+    function normalizeParticles(line) {
+      return String(line || "")
+        .replace(/は(?=\s*$|[、。,.!?！？])/g, "わ")
+        .replace(/へ(?=\s*$|[、。,.!?！？])/g, "え");
+    }
 
-    const inputLines = input.split(/\r?\n/);
+    function lightweightConvert(text) {
+      return String(text || "").split(/\r?\n/).map(line => {
+        if (isControlLine(line) || !line.trim()) return line;
+        return kanaToRomaji(normalizeParticles(line));
+      }).join("\n");
+    }
 
-    pendingResolve = function(workerLines) {
-      const outputLines = workerLines.map(decodeWorkerLine);
-      outputArea.textContent = outputLines.join("\n");
-      copyBtn.disabled = false;
-      convertBtn.disabled = false;
-      setStatus("変換完了。変換後をコピーしてSunoへ貼り付けてください。", "ok");
-      buildDiff(inputLines, outputLines);
-    };
+    function diffText(beforeText, afterText) {
+      const before = String(beforeText || "").split(/\r?\n/);
+      const after = String(afterText || "").split(/\r?\n/);
+      const rows = [];
+      const max = Math.max(before.length, after.length);
+      for (let i = 0; i < max; i++) {
+        if ((before[i] || "") !== (after[i] || "")) rows.push("Line " + (i + 1) + ": " + (before[i] || "") + "  ->  " + (after[i] || ""));
+      }
+      return rows.length ? rows.join("\n") : "変更された行はありません。";
+    }
 
-    worker.postMessage({ type: 'tokenize', lines: inputLines, id: Date.now() });
-  }
+    function showResult(result, message) {
+      outputArea.textContent = result || "変換結果が空です。";
+      diffArea.textContent = diffText(inputArea.value, result);
+      copyBtn.disabled = !result;
+      setStatus(message, "ok");
+    }
 
-  function buildDiff(before, after) {
-    const lines = before.map(function(line, i) {
-      const a = after[i] || "";
-      const changed = line !== a;
-      const cls = changed ? "diff-line-changed" : "diff-line-unchanged";
-      return '<span class="' + cls + '">' + (changed ? "→ " : "  ") + escapeHtml(line) + "  →  " + escapeHtml(a) + '</span>';
+    function runLightweight() {
+      if (!inputArea.value.trim()) { setStatus("変換前の歌詞を入力してください。", "error"); return; }
+      showResult(lightweightConvert(inputArea.value), "軽量変換が完了しました。漢字は読みを推定できないため、そのまま残ります。");
+    }
+
+    function runKuromoji() {
+      if (!inputArea.value.trim()) { setStatus("変換前の歌詞を入力してください。", "error"); return; }
+      setStatus("kuromoji辞書を読み込み中...15秒でタイムアウトします。", "loading");
+      kuromojiBtn.disabled = true;
+      lightBtn.disabled = true;
+      let worker;
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        if (worker) worker.terminate();
+        kuromojiBtn.disabled = false;
+        lightBtn.disabled = false;
+        setStatus("kuromojiが15秒以内に応答しませんでした。CDN、Worker、ネットワークを確認してください。", "error");
+      }, 15000);
+      try {
+        worker = new Worker("worker.js");
+      } catch (error) {
+        clearTimeout(timer);
+        kuromojiBtn.disabled = false;
+        lightBtn.disabled = false;
+        setStatus("Workerを起動できません: " + error.message, "error");
+        return;
+      }
+      worker.onmessage = event => {
+        const data = event.data || {};
+        if (data.type === "ready") {
+          worker.postMessage({ type: "convert", text: inputArea.value });
+        } else if (data.type === "result") {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          worker.terminate();
+          kuromojiBtn.disabled = false;
+          lightBtn.disabled = false;
+          showResult(data.result, "kuromoji精密変換が完了しました。");
+        } else if (data.type === "error") {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          worker.terminate();
+          kuromojiBtn.disabled = false;
+          lightBtn.disabled = false;
+          setStatus("kuromojiエラー: " + data.message, "error");
+        }
+      };
+      worker.onerror = error => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        worker.terminate();
+        kuromojiBtn.disabled = false;
+        lightBtn.disabled = false;
+        setStatus("Workerエラー: " + (error.message || "詳細不明"), "error");
+      };
+    }
+
+    lightBtn.addEventListener("click", runLightweight);
+    kuromojiBtn.addEventListener("click", runKuromoji);
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(outputArea.textContent || "");
+        setStatus("変換後をコピーしました。", "ok");
+      } catch (error) {
+        setStatus("コピーに失敗しました: " + error.message, "error");
+      }
     });
-    diffArea.innerHTML = lines.join("\n");
-  }
-
-  function escapeHtml(str) {
-    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  }
-
-  function copyResult() {
-    const text = outputArea.textContent;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(() => setStatus("コピーしました。Sunoの歌詞欄に貼り付けてください。", "ok"));
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = text; document.body.appendChild(ta); ta.select();
-      document.execCommand("copy"); document.body.removeChild(ta);
-      setStatus("コピーしました。", "ok");
-    }
-  }
-
-  function clearAll() {
-    document.getElementById("inputArea").value = "";
-    outputArea.textContent = "ここに変換後のローマ字が表示されます。";
-    diffArea.innerHTML = "変換後に表示されます。";
-    copyBtn.disabled = true;
-    setStatus("辞書読み込み完了済み — 歌詞を貼り付けて変換してください。", "ok");
-  }
-</script>
+    clearBtn.addEventListener("click", () => {
+      inputArea.value = "";
+      outputArea.textContent = "ここに変換後が表示されます。";
+      diffArea.textContent = "変換後に表示されます。";
+      copyBtn.disabled = true;
+      setStatus("クリアしました。", "");
+    });
+  </script>
 </body>
 </html>
