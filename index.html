@@ -244,38 +244,78 @@
 
 <script>
   // ── Web Worker (Blob URL) ──────────────────────────────────────────────
+  // 注意: importScripts自体が失敗した場合、ブラウザによってはWorker内の
+  // トップレベル例外がメインスレッドのworker.onerrorに伝わらないことがある。
+  // そのため、importScriptsをtry-catchで包み、失敗時は確実にpostMessageで
+  // エラーを通知する。
   const WORKER_SRC = `
-    importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
-    let tokenizer = null;
-    kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' })
-      .build(function(err, t) {
-        if (err) { postMessage({ type: 'error', message: err.message }); return; }
-        tokenizer = t;
-        postMessage({ type: 'ready' });
-      });
-    onmessage = function(e) {
-      if (e.data.type === 'tokenize' && tokenizer) {
-        const lines = e.data.lines;
-        const result = lines.map(function(line) {
-          if (/^\\s*\\[[^\\]]+\\]\\s*$/.test(line) || /^\\s*\\([^\\)]+\\)\\s*$/.test(line)) return line;
-          if (!line.trim()) return line;
-          const tokens = tokenizer.tokenize(line);
-          return tokens.map(function(token) {
-            if (token.pos === '助詞') {
-              if (token.surface_form === 'は') return 'WA_PARTICLE';
-              if (token.surface_form === 'へ') return 'E_PARTICLE';
-              if (token.surface_form === 'を') return 'O_PARTICLE';
-            }
-            return '__READING__' + (token.reading || token.surface_form);
-          }).join('\\x00');
-        });
-        postMessage({ type: 'result', result: result, id: e.data.id });
+    try {
+      importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
+    } catch (e) {
+      postMessage({ type: 'error', message: 'importScripts失敗: ' + e.message });
+      throw e;
+    }
+    if (typeof kuromoji === 'undefined') {
+      postMessage({ type: 'error', message: 'kuromojiオブジェクトが読み込めませんでした（importScriptsは成功したが、グローバルにkuromojiが存在しない）' });
+    } else {
+      let tokenizer = null;
+      try {
+        kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' })
+          .build(function(err, t) {
+            if (err) { postMessage({ type: 'error', message: 'build失敗: ' + err.message }); return; }
+            tokenizer = t;
+            postMessage({ type: 'ready' });
+          });
+      } catch (e) {
+        postMessage({ type: 'error', message: 'builder呼び出し失敗: ' + e.message });
       }
-    };
+      onmessage = function(e) {
+        if (e.data.type === 'tokenize' && tokenizer) {
+          const lines = e.data.lines;
+          const result = lines.map(function(line) {
+            if (/^\\s*\\[[^\\]]+\\]\\s*$/.test(line) || /^\\s*\\([^\\)]+\\)\\s*$/.test(line)) return line;
+            if (!line.trim()) return line;
+            const tokens = tokenizer.tokenize(line);
+            return tokens.map(function(token) {
+              if (token.pos === '助詞') {
+                if (token.surface_form === 'は') return 'WA_PARTICLE';
+                if (token.surface_form === 'へ') return 'E_PARTICLE';
+                if (token.surface_form === 'を') return 'O_PARTICLE';
+              }
+              return '__READING__' + (token.reading || token.surface_form);
+            }).join('\\x00');
+          });
+          postMessage({ type: 'result', result: result, id: e.data.id });
+        }
+      };
+    }
   `;
 
-  const workerBlob = new Blob([WORKER_SRC], { type: 'application/javascript' });
-  const worker = new Worker(URL.createObjectURL(workerBlob));
+  let worker;
+  try {
+    const workerBlob = new Blob([WORKER_SRC], { type: 'application/javascript' });
+    worker = new Worker(URL.createObjectURL(workerBlob));
+  } catch (e) {
+    console.error("[FATAL] Worker生成自体に失敗:", e);
+    setStatusBarFatal("Workerを起動できませんでした: " + e.message);
+  }
+
+  function setStatusBarFatal(msg) {
+    const el = document.getElementById("statusBar");
+    if (el) {
+      el.textContent = msg;
+      el.className = "status-bar error";
+    }
+  }
+
+  // ── タイムアウト監視: 15秒以内に ready/error が来なければ明示的に失敗扱いにする ──
+  let kuromojiReadyOrError = false;
+  setTimeout(function() {
+    if (!kuromojiReadyOrError) {
+      console.warn("[DEBUG] 15秒経過してもkuromoji準備完了/エラー通知が来ません。CDNアクセスまたはWorker起動自体が失敗している可能性が高いです。");
+      setStatusBarFatal("読み込みタイムアウト：CDN(jsdelivr)へのアクセスがブロックされているか、Workerの起動に失敗しています。広告ブロッカーやセキュリティ拡張機能、社内ネットワークのフィルタを確認してください。");
+    }
+  }, 15000);
 
   // ── ローマ字変換テーブル（インライン）─────────────────────────────────
   const toRomaji = (() => {
@@ -349,21 +389,28 @@
 
   let pendingResolve = null;
 
-  worker.onmessage = function(e) {
-    if (e.data.type === 'ready') {
-      convertBtn.disabled = false;
-      setStatus("準備完了 — 日本語歌詞を貼り付けて「ローマ字変換」を押してください。", "ok");
-    } else if (e.data.type === 'error') {
-      setStatus("kuromoji読み込み失敗: " + e.data.message, "error");
-    } else if (e.data.type === 'result' && pendingResolve) {
-      pendingResolve(e.data.result);
-      pendingResolve = null;
-    }
-  };
+  if (worker) {
+    worker.onmessage = function(e) {
+      if (e.data.type === 'ready') {
+        kuromojiReadyOrError = true;
+        convertBtn.disabled = false;
+        setStatus("準備完了 — 日本語歌詞を貼り付けて「ローマ字変換」を押してください。", "ok");
+      } else if (e.data.type === 'error') {
+        kuromojiReadyOrError = true;
+        console.error("[DEBUG] Worker内部からのエラー通知:", e.data.message);
+        setStatus("kuromoji読み込み失敗: " + e.data.message, "error");
+      } else if (e.data.type === 'result' && pendingResolve) {
+        pendingResolve(e.data.result);
+        pendingResolve = null;
+      }
+    };
 
-  worker.onerror = function(e) {
-    setStatus("Worker エラー: " + e.message, "error");
-  };
+    worker.onerror = function(e) {
+      kuromojiReadyOrError = true;
+      console.error("[DEBUG] worker.onerror発火:", e, "message:", e.message, "filename:", e.filename, "lineno:", e.lineno);
+      setStatus("Worker エラー: " + (e.message || "詳細不明（Consoleのfilename/linenoを確認）"), "error");
+    };
+  }
 
   function decodeWorkerLine(encoded) {
     return encoded.split('\x00').map(function(part) {
@@ -378,6 +425,11 @@
   function convert() {
     const input = document.getElementById("inputArea").value;
     if (!input.trim()) { setStatus("歌詞を入力してください。", "error"); return; }
+
+    if (!worker) {
+      setStatus("Workerが起動していないため変換できません。ページを再読み込みしてください。", "error");
+      return;
+    }
 
     setStatus("変換中...", "loading");
     convertBtn.disabled = true;
